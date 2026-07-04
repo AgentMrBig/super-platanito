@@ -95,6 +95,7 @@
 
 <div id="hud">
   <span class="chip" id="hudPlatanos">🍌 0</span>
+  <span class="chip" id="hudBtc" style="display:none;color:#f7931a">₿ 0</span>
   <span class="chip" id="hudPower" style="display:none"></span>
   <span class="chip" id="hudMode"></span>
   <span class="chip" id="hudLives">❤️❤️❤️</span>
@@ -113,7 +114,7 @@
   <h1>SUPER PLATANITO</h1>
   <p class="tag">🇩🇴 La aventura de Luis por Quisqueya 🇩🇴</p>
   <div id="cast"></div>
-  <p>Cruza el campo, la Zona Colonial y la montaña. Esquiva a los Diablos Cojuelos, recoge plátanos y llega al colmado.</p>
+  <p>Corre por el Malecón de Santo Domingo, la Zona Colonial y la montaña. Esquiva a los Diablos Cojuelos, recoge plátanos y bitcoins, y llega al colmado.</p>
   <button class="mbtn blue" id="btnClassic">🎮 Modo Clásico</button>
   <button class="mbtn" id="btnRunner">🏃 Modo Corredor</button>
   <div id="lvlRow">
@@ -213,6 +214,7 @@ const sfx = {
   power:  () => { [392, 523, 659].forEach((f, i) => setTimeout(() => blip(f, f, 0.1, 'square', 0.06), i * 80)); },
   throw:  () => blip(900, 300, 0.09, 'sawtooth', 0.05),
   hurt:   () => blip(300, 110, 0.28, 'square', 0.08),
+  btc:    () => { [880, 1175, 1760].forEach((f, i) => setTimeout(() => blip(f, f, 0.09, 'square', 0.06), i * 70)); },
 };
 
 // Background music: two tracks that alternate
@@ -245,6 +247,7 @@ const PAL = {
   W: '#f4f0e6', B: '#002d62', b: '#2a5bd7', D: '#4a3120',
   Y: '#f5c518', y: '#c99a10', G: '#3fa34d', g: '#2a7a38',
   O: '#e8722a', o: '#b5501a', T: '#ffffff', K: '#111111', P: '#7a3fa3',
+  C: '#f7931a', c: '#c46f0e',
 };
 function makeSprite(rows, scale) {
   const w = rows[0].length, h = rows.length;
@@ -334,6 +337,18 @@ SPR.platano = makeSprite([
   '....yy..',
 ], 2);
 
+SPR.btc = makeSprite([
+  '...CCCCCC...',
+  '..CCCCCCCC..',
+  '.CCCWWWWCCC.',
+  '.CCCWccWCCC.',
+  '.CCCWWWWCCC.',
+  '.CCCWccWCCC.',
+  '.CCCWWWWCCC.',
+  '..CCCCCCcc..',
+  '...CCCccc...',
+], 2);
+
 SPR.salami = makeSprite([
   '..RRRRRRRRRR..',
   '.RrRRWRRrRRWR.',
@@ -365,15 +380,15 @@ SPR.cheeseBall = makeSprite([
 // tile types: 1 = ground, 2 = block (wood), 3 = plank (one-way platform)
 const MAX_LEVEL = 3;
 const THEMES = [null,
-  { name: 'El Campo',      sky0: '#5db8e8', sky1: '#a8e0f5', sea0: '#1a7ab5', sea1: '#0d5a8c',
-    hill: 'rgba(23,111,72,0.5)',   grass: '#3fa34d', grassL: '#57c268', dirt: '#8a5a2b', decor: 'palm',
-    mount: 'rgba(18,95,110,0.32)', sil: 'rgba(8,62,52,0.55)' },
+  { name: 'Santo Domingo · El Malecón', sky0: '#4fb3ec', sky1: '#a8e4f8', sea0: '#1287cc', sea1: '#0a5a94',
+    hill: 'rgba(23,111,72,0.4)',   grass: '#3fa34d', grassL: '#57c268', dirt: '#8a5a2b', decor: 'palm',
+    mount: 'rgba(18,95,130,0.28)', sil: 'rgba(10,55,80,0.5)', silStyle: 'malecon' },
   { name: 'Zona Colonial', sky0: '#7ec8ea', sky1: '#ffd9a0', sea0: '#2a86b8', sea1: '#0d5a8c',
     hill: 'rgba(110,85,130,0.35)', grass: '#a8a8b4', grassL: '#c8c8d4', dirt: '#6e6e7a', decor: 'house',
-    mount: 'rgba(160,105,95,0.3)', sil: 'rgba(82,55,88,0.55)' },
+    mount: 'rgba(160,105,95,0.3)', sil: 'rgba(82,55,88,0.55)', silStyle: 'city' },
   { name: 'La Montaña',    sky0: '#4a90c2', sky1: '#cfe8dd', sea0: '#3e7d5c', sea1: '#2a5a42',
     hill: 'rgba(35,75,55,0.55)',   grass: '#2e8b4a', grassL: '#3fae5e', dirt: '#6e5030', decor: 'pine',
-    mount: 'rgba(35,65,95,0.45)',  sil: 'rgba(18,52,36,0.6)' },
+    mount: 'rgba(35,65,95,0.45)',  sil: 'rgba(18,52,36,0.6)', silStyle: 'pine' },
 ];
 const level = {
   cols: 0, tiles: null, items: [], enemies: [], powerups: [],
@@ -394,7 +409,8 @@ function buildLevel(n) {
     ground: (x0, x1, top) => { for (let x = x0; x <= x1; x++) for (let y = top; y < ROWS; y++) T(x, y, 1); },
     plank: (x0, x1, y) => { for (let x = x0; x <= x1; x++) T(x, y, 3); },
     block: (x, y) => T(x, y, 2),
-    nana: (x, y) => level.items.push({ x: x * TILE + 8, y: y * TILE + 6, taken: false, t: Math.random() * 6 }),
+    nana: (x, y) => level.items.push({ kind: 'nana', x: x * TILE + 8, y: y * TILE + 6, taken: false, t: Math.random() * 6 }),
+    btc: (x, y) => level.items.push({ kind: 'btc', x: x * TILE + 4, y: y * TILE + 6, taken: false, t: Math.random() * 6 }),
     nanaRow: (x0, x1, y) => { for (let x = x0; x <= x1; x++) H.nana(x, y); },
     diablo: (x, top) => level.enemies.push({ type: 'diablo', x: x * TILE, y: (top - 2) * TILE, w: 26, h: 22, vx: -45, vy: 0, dead: 0, gone: false }),
     crab: (x, top) => level.enemies.push({ type: 'crab', x: x * TILE, y: (top - 1) * TILE + 8, w: 24, h: 12, vx: -80, vy: 0, dead: 0, gone: false }),
@@ -408,7 +424,7 @@ function buildLevel(n) {
 }
 
 // ---- Nivel 1: El Campo ----
-function layoutCampo({ G, ground, plank, nana, nanaRow, diablo, crab, pow, dec, stairs }) {
+function layoutCampo({ G, ground, plank, nana, nanaRow, diablo, crab, pow, dec, stairs, btc }) {
   // gentle intro
   ground(0, 21, G);
   dec(4, G); dec(12, G); dec(19, G);
@@ -432,9 +448,9 @@ function layoutCampo({ G, ground, plank, nana, nanaRow, diablo, crab, pow, dec, 
   diablo(78, G); crab(83, G); diablo(88, G);
   plank(80, 83, G - 3); nanaRow(80, 83, G - 4);
   // checkpoint: el colmadito
-  level.colmados.push({ x: 94, top: G, cp: true });
   ground(95, 122, G);
-  level.checkpoints.push({ x: 96 * TILE, y: (G - 2) * TILE });
+  level.colmados.push({ x: 96, top: G, cp: true });
+  level.checkpoints.push({ x: 99 * TILE, y: (G - 2) * TILE });
   dec(99, G); dec(118, G);
   nanaRow(101, 103, G - 2);
   diablo(105, G); diablo(109, G); crab(114, G);
@@ -461,11 +477,14 @@ function layoutCampo({ G, ground, plank, nana, nanaRow, diablo, crab, pow, dec, 
   pow(100, G - 3, 'queso');
   pow(145, G - 2, 'salami');
   pow(155, G - 3, 'queso');
+  btc(30, G - 6);
+  btc(68, G - 4);
+  btc(136, G - 6);
   level.spawn = { x: 2 * TILE, y: (G - 2) * TILE - 10 };
 }
 
 // ---- Nivel 2: Zona Colonial ----
-function layoutZonaColonial({ G, ground, plank, nana, nanaRow, diablo, crab, pow, dec, stairs }) {
+function layoutZonaColonial({ G, ground, plank, nana, nanaRow, diablo, crab, pow, dec, stairs, btc }) {
   ground(0, 17, G);
   dec(3, G); dec(9, G); dec(15, G);
   nanaRow(6, 9, G - 2);
@@ -522,11 +541,14 @@ function layoutZonaColonial({ G, ground, plank, nana, nanaRow, diablo, crab, pow
   pow(96, G - 5, 'queso');
   pow(138, G - 3, 'salami');
   pow(157, G - 3, 'queso');
+  btc(40, G - 5);
+  btc(101, G - 8);
+  btc(110, G - 5);
   level.spawn = { x: 2 * TILE, y: (G - 2) * TILE - 10 };
 }
 
 // ---- Nivel 3: La Montaña ----
-function layoutMontana({ G, ground, plank, nana, nanaRow, diablo, crab, pow, dec, stairs }) {
+function layoutMontana({ G, ground, plank, nana, nanaRow, diablo, crab, pow, dec, stairs, btc }) {
   ground(0, 14, G);
   dec(3, G); dec(10, G);
   nanaRow(5, 8, G - 2);
@@ -590,6 +612,9 @@ function layoutMontana({ G, ground, plank, nana, nanaRow, diablo, crab, pow, dec
   pow(87, G - 4, 'queso');
   pow(109, G - 6, 'salami');
   pow(143, G - 5, 'queso');
+  btc(36, G - 8);
+  btc(103, G - 7);
+  btc(122, G - 9);
   level.spawn = { x: 2 * TILE, y: (G - 2) * TILE - 10 };
 }
 function tileAt(cx, cy) {
@@ -646,7 +671,7 @@ const game = {
   state: 'menu', mode: 'classic',
   lives: 3, platanos: 0, time: 0,
   camX: 0, respawn: null, deathTimer: 0, winTimer: 0,
-  cheese: [], levelNum: 1, startLevel: 1, interTimer: 0,
+  cheese: [], levelNum: 1, startLevel: 1, interTimer: 0, bitcoins: 0,
 };
 const player = {
   x: 0, y: 0, w: 20, h: 28, vx: 0, vy: 0,
@@ -656,7 +681,7 @@ const player = {
 
 function startGame(mode, lvl) {
   game.mode = mode;
-  game.lives = 3; game.platanos = 0; game.time = 0;
+  game.lives = 3; game.platanos = 0; game.bitcoins = 0; game.time = 0;
   document.getElementById('menu').classList.add('hidden');
   document.getElementById('gameover').classList.add('hidden');
   document.getElementById('win').classList.add('hidden');
@@ -712,6 +737,9 @@ function hurt() {
 }
 function updateHud() {
   document.getElementById('hudPlatanos').textContent = '🍌 ' + game.platanos;
+  const bc = document.getElementById('hudBtc');
+  bc.textContent = '₿ ' + game.bitcoins;
+  bc.style.display = game.bitcoins > 0 ? '' : 'none';
   document.getElementById('hudLives').textContent = '❤️'.repeat(Math.max(0, game.lives));
   const pc = document.getElementById('hudPower');
   pc.textContent = player.power === 2 ? '🥩🧀' : player.power === 1 ? '🥩' : '';
@@ -733,7 +761,7 @@ function endScreen(id, statsId) {
   document.getElementById('touchClassic').style.display = 'none';
   const mins = Math.floor(game.time / 60), secs = Math.floor(game.time % 60);
   document.getElementById(statsId).textContent =
-    `🍌 ${game.platanos} plátanos · ⏱️ ${mins}:${String(secs).padStart(2, '0')} · Nivel ${game.levelNum} · ${game.mode === 'classic' ? 'Modo Clásico' : 'Modo Corredor'}`;
+    `🍌 ${game.platanos} plátanos · ₿ ${game.bitcoins} · ⏱️ ${mins}:${String(secs).padStart(2, '0')} · Nivel ${game.levelNum} · ${game.mode === 'classic' ? 'Modo Clásico' : 'Modo Corredor'}`;
   document.getElementById(id).classList.remove('hidden');
 }
 
@@ -831,7 +859,10 @@ function updatePlayer(dt) {
     if (it.taken) continue;
     if (player.x < it.x + 16 && player.x + player.w > it.x &&
         player.y < it.y + 18 && player.y + player.h > it.y) {
-      it.taken = true; game.platanos++; updateHud(); sfx.banana();
+      it.taken = true;
+      if (it.kind === 'btc') { game.bitcoins++; sfx.btc(); }
+      else { game.platanos++; sfx.banana(); }
+      updateHud();
     }
   }
 
@@ -1056,10 +1087,12 @@ function render() {
   const sn = Math.ceil(CW / 250) + 2;
   for (let i = -1; i < sn; i++) {
     const sx = i * 250 - (spar % 250);
-    if (th.decor === 'house') {
+    const gi = i + Math.floor(spar / 250);
+    const kind = th.silStyle === 'malecon' ? (((gi % 2) + 2) % 2 === 0 ? 'city' : 'palm') : th.silStyle;
+    if (kind === 'city') {
       g.fillRect(sx - 34, horizon - 26, 26, 27); g.fillRect(sx, horizon - 42, 24, 43); g.fillRect(sx + 30, horizon - 18, 20, 19);
       g.fillRect(sx + 4, horizon - 50, 6, 9);
-    } else if (th.decor === 'pine') {
+    } else if (kind === 'pine') {
       g.beginPath(); g.moveTo(sx - 18, horizon); g.lineTo(sx, horizon - 44); g.lineTo(sx + 18, horizon); g.closePath(); g.fill();
       g.beginPath(); g.moveTo(sx + 22, horizon); g.lineTo(sx + 36, horizon - 28); g.lineTo(sx + 50, horizon); g.closePath(); g.fill();
     } else {
@@ -1134,7 +1167,13 @@ function render() {
     if (it.taken) continue;
     it.t += 0.03;
     const bob = Math.sin(it.t * 2) * 3;
-    g.drawImage(SPR.platano, it.x, it.y + bob);
+    if (it.kind === 'btc') {
+      // spinning coin: squash horizontally over time
+      const sq = Math.abs(Math.cos(it.t * 3));
+      g.drawImage(SPR.btc, it.x + 12 * (1 - sq), it.y + bob, 24 * sq, 18);
+    } else {
+      g.drawImage(SPR.platano, it.x, it.y + bob);
+    }
   }
 
   // power-ups
