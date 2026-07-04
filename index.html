@@ -243,7 +243,7 @@ document.getElementById('btnMute').addEventListener('click', () => {
 // Pixel sprites (string art -> canvas)
 // ------------------------------------------------------------
 const PAL = {
-  R: '#ce1126', r: '#8f0c1b', S: '#c98a5b', E: '#2a1a10', H: '#3a2415',
+  R: '#ce1126', r: '#8f0c1b', S: '#a8703d', E: '#2a1a10', H: '#3a2415',
   W: '#f4f0e6', B: '#002d62', b: '#2a5bd7', D: '#4a3120',
   Y: '#f5c518', y: '#c99a10', G: '#3fa34d', g: '#2a7a38',
   O: '#e8722a', o: '#b5501a', T: '#ffffff', K: '#111111', P: '#7a3fa3',
@@ -278,11 +278,11 @@ const playerBase = [
   '...SESSES...',
   '...SSSSSS...',
   '....SSSS....',
-  '..WWWWWWWW..',
-  '.SWWBWWWWWS.',
-  '.SWWBWWWWWS.',
-  '..WWBBBWWW..',
-  '..BBBBBBBB..',
+  '...WBWWWW...',
+  '..SWBWWWWS..',
+  '..SWBBBWWS..',
+  '...WWWWWW...',
+  '...BBBBBB...',
 ];
 const legsStand = ['...BB..BB...', '...BB..BB...', '..DDD..DDD..', '............'];
 const legsRun   = ['..BB....BB..', '.BB......BB.', '.DDD....DDD.', '............'];
@@ -674,7 +674,7 @@ const game = {
   cheese: [], levelNum: 1, startLevel: 1, interTimer: 0, bitcoins: 0,
 };
 const player = {
-  x: 0, y: 0, w: 20, h: 28, vx: 0, vy: 0,
+  x: 0, y: 0, w: 16, h: 28, vx: 0, vy: 0,
   onGround: false, coyote: 0, facing: 1, animT: 0, dying: false,
   power: 0, inv: 0, throwCd: 0,
 };
@@ -1213,8 +1213,8 @@ function render() {
   } else spr = player.facing >= 0 ? SPR.stand : SPR.standL;
   const flicker = player.inv > 0 && Math.floor(player.inv * 12) % 2 === 0;
   if (!flicker) {
-    if (player.power > 0) g.drawImage(spr, player.x - 5, player.y + player.h - 38, 30, 40);
-    else g.drawImage(spr, player.x - 2, player.y + player.h - 30, 24, 32);
+    if (player.power > 0) g.drawImage(spr, player.x - 7, player.y + player.h - 38, 30, 40);
+    else g.drawImage(spr, player.x - 4, player.y + player.h - 30, 24, 32);
   }
 
   g.restore();
