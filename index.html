@@ -79,6 +79,7 @@
   <span class="chip" id="hudPower" style="display:none"></span>
   <span class="chip" id="hudMode"></span>
   <span class="chip" id="hudLives">❤️❤️❤️</span>
+  <span class="chip" id="btnMute" style="pointer-events:auto;cursor:pointer">🔊</span>
 </div>
 
 <div id="touchClassic">
@@ -159,6 +160,7 @@ function audio() {
   return AC;
 }
 function blip(f0, f1, dur, type, vol) {
+  if (music.muted) return;
   const ac = audio(); if (!ac) return;
   const o = ac.createOscillator(), g = ac.createGain();
   o.type = type || 'square';
@@ -180,6 +182,28 @@ const sfx = {
   throw:  () => blip(900, 300, 0.09, 'sawtooth', 0.05),
   hurt:   () => blip(300, 110, 0.28, 'square', 0.08),
 };
+
+// Background music: two tracks that alternate
+const music = { el: null, track: 0, muted: false };
+function playTrack() {
+  music.el.src = 'bg_music/bg' + (music.track + 1) + '.mp3';
+  if (!music.muted) music.el.play().catch(() => {});
+}
+function startMusic() {
+  if (!music.el) {
+    music.el = new Audio();
+    music.el.volume = 0.45;
+    music.el.addEventListener('ended', () => { music.track = 1 - music.track; playTrack(); });
+  }
+  music.track = Math.random() < 0.5 ? 0 : 1;
+  playTrack();
+}
+function stopMusic() { if (music.el) music.el.pause(); }
+document.getElementById('btnMute').addEventListener('click', () => {
+  music.muted = !music.muted;
+  document.getElementById('btnMute').textContent = music.muted ? '🔇' : '🔊';
+  if (music.el) { if (music.muted) music.el.pause(); else if (game.state === 'playing') music.el.play().catch(() => {}); }
+});
 
 // ------------------------------------------------------------
 // Pixel sprites (string art -> canvas)
@@ -473,6 +497,7 @@ function startGame(mode) {
   hint.textContent = mode === 'classic' ? '◀ ▶ para moverte · SALTA para brincar' : 'Toca la pantalla para saltar · mantén para saltar más alto';
   setTimeout(() => hint.style.display = 'none', 4000);
   updateHud();
+  startMusic();
 }
 function respawnPlayer() {
   player.x = game.respawn.x; player.y = game.respawn.y;
@@ -519,6 +544,7 @@ function die() {
   sfx.death();
 }
 function endScreen(id, statsId) {
+  stopMusic();
   game.state = id === 'win' ? 'win' : 'gameover';
   document.getElementById('hud').style.display = 'none';
   document.getElementById('touchClassic').style.display = 'none';
@@ -941,6 +967,7 @@ document.getElementById('btnAgain').addEventListener('click', () => startGame(ga
 for (const id of ['btnMenu1', 'btnMenu2']) {
   document.getElementById(id).addEventListener('click', () => {
     game.state = 'menu';
+    stopMusic();
     document.getElementById('gameover').classList.add('hidden');
     document.getElementById('win').classList.add('hidden');
     document.getElementById('hud').style.display = 'none';
