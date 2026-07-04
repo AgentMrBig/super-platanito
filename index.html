@@ -65,6 +65,10 @@
   .mbtn.blue { background: linear-gradient(180deg, #2a5bd7, #002d62); box-shadow: 0 5px 0 #001a3a; }
   .mbtn:active { transform: translateY(3px); box-shadow: 0 2px 0 #6d0915; }
   .hidden { display: none !important; }
+  #lvlRow { display: flex; gap: 10px; align-items: center; color: #fff; font-size: 15px; }
+  .lbtn { width: 44px; height: 44px; border-radius: 10px; border: 2px solid rgba(255,255,255,.4);
+    background: rgba(255,255,255,.12); color: #fff; font-size: 18px; font-weight: 800; cursor: pointer; }
+  .lbtn.sel { background: #f5c518; color: #12233a; border-color: #fff; }
   .flagline { font-size: 30px; letter-spacing: 6px; }
   #hint { position: fixed; bottom: max(14px, env(safe-area-inset-bottom)); left: 0; right: 0;
     text-align: center; color: rgba(255,255,255,.85); font-size: 14px;
@@ -96,7 +100,19 @@
   <p>Ayuda a Platanito a cruzar el campo dominicano, esquivar a los Diablos Cojuelos y llegar al colmado. ¡Recoge todos los plátanos!</p>
   <button class="mbtn blue" id="btnClassic">🎮 Modo Clásico</button>
   <button class="mbtn" id="btnRunner">🏃 Modo Corredor</button>
+  <div id="lvlRow">
+    <span>Nivel:</span>
+    <button class="lbtn sel" data-lvl="1">1</button>
+    <button class="lbtn" data-lvl="2">2</button>
+    <button class="lbtn" data-lvl="3">3</button>
+  </div>
   <p style="font-size:13px;opacity:.75">Clásico: botones ◀ ▶ + salto (o flechas/espacio).<br>Corredor: corre solo — toca la pantalla para saltar, mantén para saltar más alto.<br>🥩 El salami te da fuelle (aguantas un golpe) · 🧀 El queso frito se lanza (X, o solo en Corredor)</p>
+</div>
+
+<div class="screen hidden" id="interlevel" style="background:rgba(4,20,45,.7)">
+  <div class="flagline">🇩🇴 ⭐</div>
+  <h2 id="ilTitle"></h2>
+  <p id="ilNext"></p>
 </div>
 
 <div class="screen hidden" id="gameover">
@@ -331,90 +347,230 @@ SPR.cheeseBall = makeSprite([
 // Level builder
 // ------------------------------------------------------------
 // tile types: 1 = ground, 2 = block (wood), 3 = plank (one-way platform)
+const MAX_LEVEL = 3;
+const THEMES = [null,
+  { name: 'El Campo',      sky0: '#5db8e8', sky1: '#a8e0f5', sea0: '#1a7ab5', sea1: '#0d5a8c',
+    hill: 'rgba(23,111,72,0.5)',   grass: '#3fa34d', grassL: '#57c268', dirt: '#8a5a2b', decor: 'palm' },
+  { name: 'Zona Colonial', sky0: '#7ec8ea', sky1: '#ffd9a0', sea0: '#2a86b8', sea1: '#0d5a8c',
+    hill: 'rgba(110,85,130,0.35)', grass: '#a8a8b4', grassL: '#c8c8d4', dirt: '#6e6e7a', decor: 'house' },
+  { name: 'La Montaña',    sky0: '#4a90c2', sky1: '#cfe8dd', sea0: '#3e7d5c', sea1: '#2a5a42',
+    hill: 'rgba(35,75,55,0.55)',   grass: '#2e8b4a', grassL: '#3fae5e', dirt: '#6e5030', decor: 'pine' },
+];
 const level = {
   cols: 0, tiles: null, items: [], enemies: [], powerups: [],
-  checkpoints: [], palms: [], colmados: [], flagX: 0, spawn: { x: 0, y: 0 },
+  checkpoints: [], decor: [], colmados: [], flagX: 0, flagBase: 11,
+  spawn: { x: 0, y: 0 }, theme: THEMES[1],
 };
-function buildLevel() {
-  const COLS = 210;
+function buildLevel(n) {
+  level.theme = THEMES[n];
+  const COLS = n === 2 ? 195 : n === 3 ? 200 : 210;
   level.cols = COLS;
   level.tiles = new Uint8Array(COLS * ROWS);
   level.items = []; level.enemies = []; level.checkpoints = [];
-  level.palms = []; level.colmados = []; level.powerups = [];
+  level.decor = []; level.colmados = []; level.powerups = [];
   const T = (x, y, v) => { if (x >= 0 && x < COLS && y >= 0 && y < ROWS) level.tiles[y * COLS + x] = v; };
-  const ground = (x0, x1, top) => { for (let x = x0; x <= x1; x++) for (let y = top; y < ROWS; y++) T(x, y, 1); };
-  const plank = (x0, x1, y) => { for (let x = x0; x <= x1; x++) T(x, y, 3); };
-  const block = (x, y) => T(x, y, 2);
-  const nana = (x, y) => level.items.push({ x: x * TILE + 8, y: y * TILE + 6, taken: false, t: Math.random() * 6 });
-  const nanaRow = (x0, x1, y) => { for (let x = x0; x <= x1; x++) nana(x, y); };
-  const diablo = (x, top) => level.enemies.push({ type: 'diablo', x: x * TILE, y: (top - 2) * TILE, w: 26, h: 22, vx: -45, vy: 0, dead: 0, gone: false });
-  const crab = (x, top) => level.enemies.push({ type: 'crab', x: x * TILE, y: (top - 1) * TILE + 8, w: 24, h: 12, vx: -80, vy: 0, dead: 0, gone: false });
-  const pow = (x, y, type) => level.powerups.push({ x: x * TILE + 4, y: y * TILE + 8, type, taken: false, t: Math.random() * 6 });
-
   const G = 11; // default ground top row
+  const H = {
+    G,
+    ground: (x0, x1, top) => { for (let x = x0; x <= x1; x++) for (let y = top; y < ROWS; y++) T(x, y, 1); },
+    plank: (x0, x1, y) => { for (let x = x0; x <= x1; x++) T(x, y, 3); },
+    block: (x, y) => T(x, y, 2),
+    nana: (x, y) => level.items.push({ x: x * TILE + 8, y: y * TILE + 6, taken: false, t: Math.random() * 6 }),
+    nanaRow: (x0, x1, y) => { for (let x = x0; x <= x1; x++) H.nana(x, y); },
+    diablo: (x, top) => level.enemies.push({ type: 'diablo', x: x * TILE, y: (top - 2) * TILE, w: 26, h: 22, vx: -45, vy: 0, dead: 0, gone: false }),
+    crab: (x, top) => level.enemies.push({ type: 'crab', x: x * TILE, y: (top - 1) * TILE + 8, w: 24, h: 12, vx: -80, vy: 0, dead: 0, gone: false }),
+    pow: (x, y, type) => level.powerups.push({ x: x * TILE + 4, y: y * TILE + 8, type, taken: false, t: Math.random() * 6 }),
+    dec: (x, top) => level.decor.push({ x, top }),
+    stairs: (x0, steps, top) => { for (let i = 0; i < steps; i++) for (let j = 0; j <= i; j++) T(x0 + i, top - 1 - j, 2); },
+  };
+  if (n === 2) layoutZonaColonial(H);
+  else if (n === 3) layoutMontana(H);
+  else layoutCampo(H);
+}
 
-  // -- Section 1: el campo (gentle intro) --
+// ---- Nivel 1: El Campo ----
+function layoutCampo({ G, ground, plank, nana, nanaRow, diablo, crab, pow, dec, stairs }) {
+  // gentle intro
   ground(0, 21, G);
-  level.palms.push(4, 12, 19);
+  dec(4, G); dec(12, G); dec(19, G);
   nanaRow(8, 11, G - 2);
   diablo(16, G);
-
   // pit
   ground(24, 43, G);
-  level.palms.push(27, 40);
+  dec(27, G); dec(40, G);
   plank(28, 31, G - 3); nanaRow(28, 31, G - 4);
   diablo(35, G); diablo(38, G);
-
-  // -- Section 2: las lomas (hills / steps) --
+  // las lomas (hills)
   ground(46, 66, G);
-  ground(52, 58, G - 2);            // raised hill
+  ground(52, 58, G - 2);
   nanaRow(53, 57, G - 4);
   crab(62, G);
   plank(61, 63, G - 4); nana(62, G - 5);
-
   // pit with floating planks
   plank(68, 69, G - 1);
   ground(72, 92, G);
-  level.palms.push(75, 90);
+  dec(75, G); dec(90, G);
   diablo(78, G); crab(83, G); diablo(88, G);
   plank(80, 83, G - 3); nanaRow(80, 83, G - 4);
-
-  // -- Checkpoint: el colmadito --
+  // checkpoint: el colmadito
   level.colmados.push({ x: 94, top: G, cp: true });
   ground(95, 122, G);
   level.checkpoints.push({ x: 96 * TILE, y: (G - 2) * TILE });
-  level.palms.push(99, 118);
+  dec(99, G); dec(118, G);
   nanaRow(101, 103, G - 2);
   diablo(105, G); diablo(109, G); crab(114, G);
   plank(107, 110, G - 3); plank(112, 115, G - 5); nanaRow(112, 115, G - 6);
-
-  // -- Section 3: la playa (beach, big gaps + planks) --
+  // la playa
   ground(125, 131, G);
   plank(134, 135, G - 1); nana(134, G - 3);
   plank(138, 139, G - 2); nana(138, G - 4);
   ground(142, 160, G);
-  level.palms.push(144, 150, 157);
+  dec(144, G); dec(150, G); dec(157, G);
   crab(147, G); crab(152, G); crab(156, G);
   nanaRow(148, 151, G - 2);
-
-  // -- Section 4: la subida final (SMB1-style staircase of blocks) --
+  // la subida final
   ground(163, 209, G);
   diablo(166, G); diablo(170, G);
-  for (let i = 0; i < 5; i++) for (let j = 0; j <= i; j++) block(175 + i, G - 1 - j);
+  stairs(175, 5, G);
   nanaRow(176, 179, G - 7);
-  // downhill is a jump off the top
-  level.flagX = 188 * TILE;
+  level.flagX = 188 * TILE; level.flagBase = G;
   level.colmados.push({ x: 192, top: G, cp: false });
-  level.palms.push(198, 203);
-
-  // power-ups: los tres golpes (bueno, dos de ellos)
+  dec(198, G); dec(203, G);
   pow(13, G - 3, 'salami');
   pow(33, G - 3, 'queso');
   pow(56, G - 4, 'salami');
   pow(100, G - 3, 'queso');
   pow(145, G - 2, 'salami');
   pow(155, G - 3, 'queso');
+  level.spawn = { x: 2 * TILE, y: (G - 2) * TILE - 10 };
+}
 
+// ---- Nivel 2: Zona Colonial ----
+function layoutZonaColonial({ G, ground, plank, nana, nanaRow, diablo, crab, pow, dec, stairs }) {
+  ground(0, 17, G);
+  dec(3, G); dec(9, G); dec(15, G);
+  nanaRow(6, 9, G - 2);
+  diablo(13, G);
+  // pit 18-20
+  ground(21, 38, G);
+  dec(24, G); dec(33, G);
+  plank(24, 27, G - 3); nanaRow(24, 27, G - 4);
+  diablo(26, G); diablo(31, G); crab(35, G);
+  // pit 39-42 with mid plank
+  plank(40, 41, G - 2); nana(40, G - 4); nana(41, G - 4);
+  ground(43, 60, G);
+  dec(46, G); dec(55, G);
+  diablo(48, G); diablo(52, G); crab(57, G);
+  plank(50, 53, G - 3); nanaRow(50, 53, G - 4);
+  plank(55, 58, G - 5); nanaRow(55, 58, G - 6);
+  // pit 61-64
+  plank(62, 63, G - 1);
+  ground(65, 84, G);
+  dec(68, G); dec(78, G);
+  level.colmados.push({ x: 71, top: G, cp: true });
+  level.checkpoints.push({ x: 74 * TILE, y: (G - 2) * TILE });
+  diablo(77, G); diablo(80, G); crab(82, G);
+  // pit 85-88
+  plank(86, 87, G - 3); nana(86, G - 5); nana(87, G - 5);
+  ground(89, 108, G);
+  dec(92, G); dec(103, G);
+  plank(94, 97, G - 4); nanaRow(94, 97, G - 5);
+  plank(100, 103, G - 6); nanaRow(100, 103, G - 7);
+  diablo(95, G); diablo(101, G); crab(106, G);
+  // pit 109-113 (wide!)
+  plank(110, 111, G - 2);
+  ground(114, 132, G);
+  dec(117, G); dec(128, G);
+  diablo(120, G); crab(124, G); diablo(127, G);
+  nanaRow(121, 124, G - 2);
+  // pit 133-135
+  ground(136, 160, G);
+  dec(140, G); dec(152, G);
+  diablo(142, G); diablo(146, G); crab(150, G); diablo(155, G);
+  plank(144, 147, G - 3); nanaRow(144, 147, G - 4);
+  plank(150, 153, G - 5); nanaRow(150, 153, G - 6);
+  // pit 161-163
+  ground(164, 194, G);
+  diablo(168, G);
+  stairs(172, 6, G);
+  nanaRow(173, 176, G - 8);
+  level.flagX = 184 * TILE; level.flagBase = G;
+  level.colmados.push({ x: 187, top: G, cp: false });
+  dec(191, G);
+  pow(7, G - 3, 'salami');
+  pow(33, G - 3, 'queso');
+  pow(66, G - 3, 'salami');
+  pow(96, G - 5, 'queso');
+  pow(138, G - 3, 'salami');
+  pow(157, G - 3, 'queso');
+  level.spawn = { x: 2 * TILE, y: (G - 2) * TILE - 10 };
+}
+
+// ---- Nivel 3: La Montaña ----
+function layoutMontana({ G, ground, plank, nana, nanaRow, diablo, crab, pow, dec, stairs }) {
+  ground(0, 14, G);
+  dec(3, G); dec(10, G);
+  nanaRow(5, 8, G - 2);
+  // terraced climb
+  ground(15, 24, G - 2);
+  dec(18, G - 2);
+  diablo(20, G - 2);
+  ground(25, 34, G - 4);
+  nanaRow(27, 30, G - 6);
+  crab(31, G - 4);
+  // pit 35-38
+  plank(36, 37, G - 5);
+  ground(39, 50, G - 4);
+  dec(42, G - 4);
+  diablo(45, G - 4); diablo(48, G - 4);
+  // step down
+  ground(51, 58, G - 2);
+  crab(54, G - 2);
+  nanaRow(52, 55, G - 4);
+  // pit 59-63 (wide)
+  plank(60, 61, G - 3); plank(62, 63, G - 4);
+  ground(64, 80, G);
+  dec(67, G); dec(75, G);
+  diablo(70, G); crab(73, G); diablo(77, G);
+  plank(70, 73, G - 3); nanaRow(70, 73, G - 4);
+  // checkpoint on the ridge
+  ground(81, 100, G - 2);
+  level.colmados.push({ x: 83, top: G - 2, cp: true });
+  level.checkpoints.push({ x: 86 * TILE, y: (G - 4) * TILE });
+  dec(88, G - 2); dec(96, G - 2);
+  diablo(91, G - 2); crab(94, G - 2);
+  nanaRow(92, 95, G - 4);
+  // pit 101-105
+  plank(102, 103, G - 4);
+  ground(106, 120, G - 4);
+  dec(110, G - 4);
+  diablo(112, G - 4); diablo(116, G - 4);
+  nanaRow(108, 111, G - 6);
+  // pit 121-124, high path
+  plank(122, 123, G - 6);
+  // the summit ridge
+  ground(125, 140, G - 6);
+  dec(128, G - 6); dec(135, G - 6);
+  crab(130, G - 6); diablo(133, G - 6);
+  nanaRow(129, 132, G - 8);
+  // descent
+  ground(141, 152, G - 3);
+  diablo(145, G - 3); crab(148, G - 3);
+  // pit 153-156
+  plank(154, 155, G - 5);
+  ground(157, 199, G);
+  dec(160, G); dec(190, G); dec(195, G);
+  diablo(162, G); diablo(166, G); diablo(170, G);
+  stairs(174, 6, G);
+  nanaRow(175, 178, G - 8);
+  level.flagX = 186 * TILE; level.flagBase = G;
+  level.colmados.push({ x: 190, top: G, cp: false });
+  pow(6, G - 3, 'salami');
+  pow(29, G - 6, 'queso');
+  pow(66, G - 2, 'salami');
+  pow(87, G - 4, 'queso');
+  pow(109, G - 6, 'salami');
+  pow(143, G - 5, 'queso');
   level.spawn = { x: 2 * TILE, y: (G - 2) * TILE - 10 };
 }
 function tileAt(cx, cy) {
@@ -471,7 +627,7 @@ const game = {
   state: 'menu', mode: 'classic',
   lives: 3, platanos: 0, time: 0,
   camX: 0, respawn: null, deathTimer: 0, winTimer: 0,
-  cheese: [],
+  cheese: [], levelNum: 1, startLevel: 1, interTimer: 0,
 };
 const player = {
   x: 0, y: 0, w: 20, h: 28, vx: 0, vy: 0,
@@ -479,25 +635,33 @@ const player = {
   power: 0, inv: 0, throwCd: 0,
 };
 
-function startGame(mode) {
-  buildLevel();
+function startGame(mode, lvl) {
   game.mode = mode;
-  game.state = 'playing';
   game.lives = 3; game.platanos = 0; game.time = 0;
-  game.respawn = { ...level.spawn };
-  respawnPlayer();
   document.getElementById('menu').classList.add('hidden');
   document.getElementById('gameover').classList.add('hidden');
   document.getElementById('win').classList.add('hidden');
+  document.getElementById('interlevel').classList.add('hidden');
   document.getElementById('hud').style.display = 'flex';
-  document.getElementById('hudMode').textContent = mode === 'classic' ? '🎮 Clásico' : '🏃 Corredor';
   document.getElementById('touchClassic').style.display = mode === 'classic' ? 'block' : 'none';
+  startLevel(lvl || game.startLevel, false);
   const hint = document.getElementById('hint');
   hint.style.display = 'block';
   hint.textContent = mode === 'classic' ? '◀ ▶ para moverte · SALTA para brincar' : 'Toca la pantalla para saltar · mantén para saltar más alto';
   setTimeout(() => hint.style.display = 'none', 4000);
-  updateHud();
   startMusic();
+}
+function startLevel(n, keepPower) {
+  const power = keepPower ? player.power : 0;
+  game.levelNum = n;
+  buildLevel(n);
+  game.state = 'playing';
+  game.respawn = { ...level.spawn };
+  respawnPlayer();
+  setPower(power);
+  document.getElementById('hudMode').textContent =
+    (game.mode === 'classic' ? '🎮' : '🏃') + ' Nivel ' + n + ' · ' + level.theme.name;
+  updateHud();
 }
 function respawnPlayer() {
   player.x = game.respawn.x; player.y = game.respawn.y;
@@ -550,7 +714,7 @@ function endScreen(id, statsId) {
   document.getElementById('touchClassic').style.display = 'none';
   const mins = Math.floor(game.time / 60), secs = Math.floor(game.time % 60);
   document.getElementById(statsId).textContent =
-    `🍌 ${game.platanos} plátanos · ⏱️ ${mins}:${String(secs).padStart(2, '0')} · ${game.mode === 'classic' ? 'Modo Clásico' : 'Modo Corredor'}`;
+    `🍌 ${game.platanos} plátanos · ⏱️ ${mins}:${String(secs).padStart(2, '0')} · Nivel ${game.levelNum} · ${game.mode === 'classic' ? 'Modo Clásico' : 'Modo Corredor'}`;
   document.getElementById(id).classList.remove('hidden');
 }
 
@@ -775,6 +939,30 @@ function drawPalm(g, x, topRow) {
   g.beginPath(); g.arc(tx - 4, ty + 6, 5, 0, 7); g.arc(tx + 5, ty + 7, 5, 0, 7); g.fill();
 }
 
+const HOUSE_COLORS = ['#e86f9e', '#5bc0de', '#f5a623', '#7ed67e', '#b78fe0', '#f0e14a'];
+function drawHouse(g, x, topRow) {
+  const bx = x * TILE, by = topRow * TILE;
+  const w = 72, h = 66;
+  g.fillStyle = HOUSE_COLORS[x % HOUSE_COLORS.length];
+  g.fillRect(bx, by - h, w, h);
+  g.fillStyle = 'rgba(255,255,255,.85)';
+  g.fillRect(bx, by - h, w, 6);
+  g.fillStyle = '#c25b3a';
+  g.fillRect(bx - 5, by - h - 12, w + 10, 14);
+  g.fillStyle = '#4a2f1d'; g.fillRect(bx + 10, by - 40, 18, 40);
+  g.fillStyle = '#bfe8ff'; g.fillRect(bx + 42, by - 46, 20, 22);
+  g.strokeStyle = '#fff'; g.lineWidth = 2; g.strokeRect(bx + 42, by - 46, 20, 22);
+}
+function drawPine(g, x, topRow) {
+  const bx = x * TILE + 16, by = topRow * TILE;
+  g.fillStyle = '#5a4028'; g.fillRect(bx - 4, by - 30, 8, 30);
+  g.fillStyle = '#1f6b3a';
+  for (let i = 0; i < 3; i++) {
+    const w = 52 - i * 12, ty = by - 28 - i * 24;
+    g.beginPath(); g.moveTo(bx - w / 2, ty); g.lineTo(bx + w / 2, ty); g.lineTo(bx, ty - 34); g.closePath(); g.fill();
+  }
+}
+
 function drawColmado(g, c) {
   const x = c.x * TILE, y = c.top * TILE;
   const w = 96, h = 84;
@@ -793,7 +981,7 @@ function drawColmado(g, c) {
 }
 
 function drawFlag(g) {
-  const x = level.flagX, base = 11 * TILE;
+  const x = level.flagX, base = level.flagBase * TILE;
   g.fillStyle = '#d9d9d9'; g.fillRect(x - 3, base - 150, 6, 150);
   g.beginPath(); g.arc(x, base - 154, 7, 0, 7); g.fillStyle = '#f5c518'; g.fill();
   // DR flag: white cross, blue/red quadrants
@@ -804,10 +992,10 @@ function drawFlag(g) {
 }
 
 function render() {
-  const g = ctx, s = game.scale;
+  const g = ctx, s = game.scale, th = level.theme;
   // sky
   const grad = g.createLinearGradient(0, 0, 0, CH);
-  grad.addColorStop(0, '#5db8e8'); grad.addColorStop(0.55, '#a8e0f5'); grad.addColorStop(0.56, '#1a7ab5'); grad.addColorStop(1, '#0d5a8c');
+  grad.addColorStop(0, th.sky0); grad.addColorStop(0.55, th.sky1); grad.addColorStop(0.56, th.sea0); grad.addColorStop(1, th.sea1);
   g.fillStyle = grad; g.fillRect(0, 0, CW, CH);
 
   // sun
@@ -815,7 +1003,7 @@ function render() {
   g.beginPath(); g.arc(CW * 0.82, CH * 0.14, 34, 0, 7); g.fill();
 
   // distant hills (parallax)
-  g.fillStyle = 'rgba(23,111,72,0.5)';
+  g.fillStyle = th.hill;
   const par = game.camX * 0.3;
   for (let i = -1; i < 6; i++) {
     const hx = i * 420 - (par % 420);
@@ -837,8 +1025,12 @@ function render() {
   const cx0 = Math.floor(game.camX / TILE) - 1;
   const cx1 = Math.ceil((game.camX + CW / s) / TILE) + 1;
 
-  // palms & colmados behind tiles
-  for (const p of level.palms) if (p >= cx0 - 3 && p <= cx1 + 3) drawPalm(g, p, 11);
+  // scenery & colmados behind tiles
+  for (const d of level.decor) if (d.x >= cx0 - 4 && d.x <= cx1 + 4) {
+    if (th.decor === 'house') drawHouse(g, d.x, d.top);
+    else if (th.decor === 'pine') drawPine(g, d.x, d.top);
+    else drawPalm(g, d.x, d.top);
+  }
   for (const c of level.colmados) if (c.x >= cx0 - 4 && c.x <= cx1) drawColmado(g, c);
   drawFlag(g);
 
@@ -850,10 +1042,10 @@ function render() {
       const px = x * TILE, py = y * TILE;
       if (t === 1) {
         const isTop = tileAt(x, y - 1) !== 1;
-        g.fillStyle = '#8a5a2b'; g.fillRect(px, py, TILE, TILE);
+        g.fillStyle = th.dirt; g.fillRect(px, py, TILE, TILE);
         g.fillStyle = 'rgba(0,0,0,0.08)';
         g.fillRect(px + 2, py + 10, 12, 6); g.fillRect(px + 18, py + 22, 10, 5);
-        if (isTop) { g.fillStyle = '#3fa34d'; g.fillRect(px, py, TILE, 9); g.fillStyle = '#57c268'; g.fillRect(px, py, TILE, 4); }
+        if (isTop) { g.fillStyle = th.grass; g.fillRect(px, py, TILE, 9); g.fillStyle = th.grassL; g.fillRect(px, py, TILE, 4); }
       } else if (t === 2) {
         g.fillStyle = '#c98446'; g.fillRect(px, py, TILE, TILE);
         g.strokeStyle = '#8a5a2b'; g.lineWidth = 2; g.strokeRect(px + 1, py + 1, TILE - 2, TILE - 2);
@@ -949,7 +1141,22 @@ function frame(now) {
     moveAndCollide(player, dt, true);
     player.animT += dt * 3;
     game.winTimer -= dt;
-    if (game.winTimer <= 0) endScreen('win', 'winStats');
+    if (game.winTimer <= 0) {
+      if (game.levelNum < MAX_LEVEL) {
+        game.state = 'interlevel'; game.interTimer = 2.4;
+        document.getElementById('ilTitle').textContent = '¡Nivel ' + game.levelNum + ' completado!';
+        document.getElementById('ilNext').textContent = 'Siguiente: ' + THEMES[game.levelNum + 1].name;
+        document.getElementById('interlevel').classList.remove('hidden');
+      } else {
+        endScreen('win', 'winStats');
+      }
+    }
+  } else if (game.state === 'interlevel') {
+    game.interTimer -= dt;
+    if (game.interTimer <= 0) {
+      document.getElementById('interlevel').classList.add('hidden');
+      startLevel(game.levelNum + 1, true);
+    }
   }
 
   render();
@@ -962,8 +1169,12 @@ requestAnimationFrame(frame);
 // ------------------------------------------------------------
 document.getElementById('btnClassic').addEventListener('click', () => { audio(); startGame('classic'); });
 document.getElementById('btnRunner').addEventListener('click', () => { audio(); startGame('runner'); });
-document.getElementById('btnRetry').addEventListener('click', () => startGame(game.mode));
+document.getElementById('btnRetry').addEventListener('click', () => startGame(game.mode, game.levelNum));
 document.getElementById('btnAgain').addEventListener('click', () => startGame(game.mode));
+document.querySelectorAll('.lbtn').forEach(b => b.addEventListener('click', () => {
+  game.startLevel = +b.dataset.lvl;
+  document.querySelectorAll('.lbtn').forEach(x => x.classList.toggle('sel', x === b));
+}));
 for (const id of ['btnMenu1', 'btnMenu2']) {
   document.getElementById(id).addEventListener('click', () => {
     game.state = 'menu';
@@ -975,7 +1186,7 @@ for (const id of ['btnMenu1', 'btnMenu2']) {
     document.getElementById('menu').classList.remove('hidden');
   });
 }
-buildLevel(); // so the menu shows the world behind it
+buildLevel(1); // so the menu shows the world behind it
 game.camX = 0;
 </script>
 </body>
