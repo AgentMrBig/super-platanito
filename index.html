@@ -43,6 +43,7 @@
   #btnL { left: 16px; }
   #btnR { left: 106px; }
   #btnJ { right: 20px; width: 88px; height: 88px; font-size: 22px; background: rgba(206,17,38,.35); border-color: rgba(255,255,255,.55); }
+  #btnQ { right: 124px; width: 64px; height: 64px; font-size: 28px; background: rgba(245,197,24,.3); display: none; }
 
   /* ---------- Overlay screens ---------- */
   .screen {
@@ -75,6 +76,7 @@
 
 <div id="hud">
   <span class="chip" id="hudPlatanos">🍌 0</span>
+  <span class="chip" id="hudPower" style="display:none"></span>
   <span class="chip" id="hudMode"></span>
   <span class="chip" id="hudLives">❤️❤️❤️</span>
 </div>
@@ -82,6 +84,7 @@
 <div id="touchClassic">
   <div class="tbtn" id="btnL">◀</div>
   <div class="tbtn" id="btnR">▶</div>
+  <div class="tbtn" id="btnQ">🧀</div>
   <div class="tbtn" id="btnJ">SALTA</div>
 </div>
 <div id="hint"></div>
@@ -92,7 +95,7 @@
   <p>Ayuda a Platanito a cruzar el campo dominicano, esquivar a los Diablos Cojuelos y llegar al colmado. ¡Recoge todos los plátanos!</p>
   <button class="mbtn blue" id="btnClassic">🎮 Modo Clásico</button>
   <button class="mbtn" id="btnRunner">🏃 Modo Corredor</button>
-  <p style="font-size:13px;opacity:.75">Clásico: botones ◀ ▶ + salto (o flechas/espacio).<br>Corredor: corre solo — toca la pantalla para saltar, mantén para saltar más alto.</p>
+  <p style="font-size:13px;opacity:.75">Clásico: botones ◀ ▶ + salto (o flechas/espacio).<br>Corredor: corre solo — toca la pantalla para saltar, mantén para saltar más alto.<br>🥩 El salami te da fuelle (aguantas un golpe) · 🧀 El queso frito se lanza (X, o solo en Corredor)</p>
 </div>
 
 <div class="screen hidden" id="gameover">
@@ -173,6 +176,9 @@ const sfx = {
   death:  () => blip(400, 60, 0.5, 'sawtooth', 0.1),
   check:  () => { blip(520, 520, 0.08, 'square', 0.06); setTimeout(() => blip(780, 780, 0.14, 'square', 0.06), 90); },
   win:    () => { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => blip(f, f, 0.16, 'square', 0.07), i * 130)); },
+  power:  () => { [392, 523, 659].forEach((f, i) => setTimeout(() => blip(f, f, 0.1, 'square', 0.06), i * 80)); },
+  throw:  () => blip(900, 300, 0.09, 'sawtooth', 0.05),
+  hurt:   () => blip(300, 110, 0.28, 'square', 0.08),
 };
 
 // ------------------------------------------------------------
@@ -272,12 +278,37 @@ SPR.platano = makeSprite([
   '....yy..',
 ], 2);
 
+SPR.salami = makeSprite([
+  '..RRRRRRRRRR..',
+  '.RrRRWRRrRRWR.',
+  'YRRRRRRRRRRRRY',
+  'YRWRRrRRWRRrRY',
+  '.RRRRRRRRRRRR.',
+  '..RRRRRRRRRR..',
+], 2);
+
+SPR.queso = makeSprite([
+  '...yyyyyy...',
+  '..yYYYYYYy..',
+  '.yYYYYYYYYy.',
+  '.yYWYYYYWYy.',
+  '.yYYYYYYYYy.',
+  '..yyyyyyyy..',
+], 2);
+
+SPR.cheeseBall = makeSprite([
+  '.yYy.',
+  'yYYYy',
+  'yYWYy',
+  '.yyy.',
+], 2);
+
 // ------------------------------------------------------------
 // Level builder
 // ------------------------------------------------------------
 // tile types: 1 = ground, 2 = block (wood), 3 = plank (one-way platform)
 const level = {
-  cols: 0, tiles: null, items: [], enemies: [],
+  cols: 0, tiles: null, items: [], enemies: [], powerups: [],
   checkpoints: [], palms: [], colmados: [], flagX: 0, spawn: { x: 0, y: 0 },
 };
 function buildLevel() {
@@ -285,7 +316,7 @@ function buildLevel() {
   level.cols = COLS;
   level.tiles = new Uint8Array(COLS * ROWS);
   level.items = []; level.enemies = []; level.checkpoints = [];
-  level.palms = []; level.colmados = [];
+  level.palms = []; level.colmados = []; level.powerups = [];
   const T = (x, y, v) => { if (x >= 0 && x < COLS && y >= 0 && y < ROWS) level.tiles[y * COLS + x] = v; };
   const ground = (x0, x1, top) => { for (let x = x0; x <= x1; x++) for (let y = top; y < ROWS; y++) T(x, y, 1); };
   const plank = (x0, x1, y) => { for (let x = x0; x <= x1; x++) T(x, y, 3); };
@@ -294,6 +325,7 @@ function buildLevel() {
   const nanaRow = (x0, x1, y) => { for (let x = x0; x <= x1; x++) nana(x, y); };
   const diablo = (x, top) => level.enemies.push({ type: 'diablo', x: x * TILE, y: (top - 2) * TILE, w: 26, h: 22, vx: -45, vy: 0, dead: 0, gone: false });
   const crab = (x, top) => level.enemies.push({ type: 'crab', x: x * TILE, y: (top - 1) * TILE + 8, w: 24, h: 12, vx: -80, vy: 0, dead: 0, gone: false });
+  const pow = (x, y, type) => level.powerups.push({ x: x * TILE + 4, y: y * TILE + 8, type, taken: false, t: Math.random() * 6 });
 
   const G = 11; // default ground top row
 
@@ -351,6 +383,14 @@ function buildLevel() {
   level.colmados.push({ x: 192, top: G, cp: false });
   level.palms.push(198, 203);
 
+  // power-ups: los tres golpes (bueno, dos de ellos)
+  pow(13, G - 3, 'salami');
+  pow(33, G - 3, 'queso');
+  pow(56, G - 4, 'salami');
+  pow(100, G - 3, 'queso');
+  pow(145, G - 2, 'salami');
+  pow(155, G - 3, 'queso');
+
   level.spawn = { x: 2 * TILE, y: (G - 2) * TILE - 10 };
 }
 function tileAt(cx, cy) {
@@ -363,7 +403,7 @@ function tileAt(cx, cy) {
 // ------------------------------------------------------------
 // Input
 // ------------------------------------------------------------
-const input = { left: false, right: false, jumpHeld: false, jumpBuffered: 0 };
+const input = { left: false, right: false, jumpHeld: false, jumpBuffered: 0, throwPressed: false };
 function pressJump() { input.jumpHeld = true; input.jumpBuffered = JUMP_BUFFER; audio(); }
 function releaseJump() { input.jumpHeld = false; }
 
@@ -372,6 +412,7 @@ window.addEventListener('keydown', e => {
   if (e.code === 'ArrowLeft' || e.code === 'KeyA') input.left = true;
   if (e.code === 'ArrowRight' || e.code === 'KeyD') input.right = true;
   if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') { e.preventDefault(); pressJump(); }
+  if (e.code === 'KeyX' || e.code === 'KeyC') input.throwPressed = true;
 });
 window.addEventListener('keyup', e => {
   if (e.code === 'ArrowLeft' || e.code === 'KeyA') input.left = false;
@@ -390,6 +431,7 @@ function bindHold(el, on, off) {
 bindHold(document.getElementById('btnL'), () => input.left = true, () => input.left = false);
 bindHold(document.getElementById('btnR'), () => input.right = true, () => input.right = false);
 bindHold(document.getElementById('btnJ'), pressJump, releaseJump);
+bindHold(document.getElementById('btnQ'), () => input.throwPressed = true, () => {});
 
 // Runner mode: tap anywhere on the canvas
 canvas.addEventListener('pointerdown', e => {
@@ -405,10 +447,12 @@ const game = {
   state: 'menu', mode: 'classic',
   lives: 3, platanos: 0, time: 0,
   camX: 0, respawn: null, deathTimer: 0, winTimer: 0,
+  cheese: [],
 };
 const player = {
   x: 0, y: 0, w: 20, h: 28, vx: 0, vy: 0,
   onGround: false, coyote: 0, facing: 1, animT: 0, dying: false,
+  power: 0, inv: 0, throwCd: 0,
 };
 
 function startGame(mode) {
@@ -434,12 +478,38 @@ function respawnPlayer() {
   player.x = game.respawn.x; player.y = game.respawn.y;
   player.vx = 0; player.vy = 0; player.dying = false;
   player.onGround = false; player.coyote = 0;
+  player.power = 0; player.h = 28; player.inv = 0; player.throwCd = 0;
+  game.cheese = [];
   game.camX = Math.max(0, player.x - 200);
   input.left = input.right = input.jumpHeld = false; input.jumpBuffered = 0;
+  input.throwPressed = false;
+  updateHud();
+}
+function setPower(p) {
+  const bottom = player.y + player.h;
+  player.power = p;
+  player.h = p > 0 ? 34 : 28;
+  player.y = bottom - player.h;
+  updateHud();
+}
+function hurt() {
+  if (player.inv > 0 || player.dying) return;
+  if (player.power > 0) {
+    setPower(player.power - 1);
+    player.inv = 1.8;
+    sfx.hurt();
+  } else {
+    die();
+  }
 }
 function updateHud() {
   document.getElementById('hudPlatanos').textContent = '🍌 ' + game.platanos;
   document.getElementById('hudLives').textContent = '❤️'.repeat(Math.max(0, game.lives));
+  const pc = document.getElementById('hudPower');
+  pc.textContent = player.power === 2 ? '🥩🧀' : player.power === 1 ? '🥩' : '';
+  pc.style.display = player.power > 0 ? '' : 'none';
+  document.getElementById('btnQ').style.display =
+    (game.mode === 'classic' && player.power === 2 && game.state === 'playing') ? 'flex' : 'none';
 }
 function die() {
   if (player.dying) return;
@@ -556,6 +626,28 @@ function updatePlayer(dt) {
     }
   }
 
+  // power-ups
+  if (player.inv > 0) player.inv -= dt;
+  for (const p of level.powerups) {
+    if (p.taken) continue;
+    if (player.x < p.x + 26 && player.x + player.w > p.x &&
+        player.y < p.y + 14 && player.y + player.h > p.y) {
+      p.taken = true;
+      setPower(p.type === 'queso' ? 2 : Math.max(player.power, 1));
+      sfx.power();
+    }
+  }
+
+  // throw queso frito (auto-throw in runner mode)
+  player.throwCd -= dt;
+  if (player.power === 2 && player.throwCd <= 0 && game.cheese.length < 2 &&
+      (game.mode === 'runner' || input.throwPressed)) {
+    game.cheese.push({ x: player.x + player.w / 2, y: player.y + 6, vx: 430 * player.facing + player.vx * 0.25, vy: -130, t: 0 });
+    player.throwCd = game.mode === 'runner' ? 1.2 : 0.4;
+    sfx.throw();
+  }
+  input.throwPressed = false;
+
   // checkpoints
   for (const cp of level.checkpoints) {
     if (player.x >= cp.x && game.respawn.x < cp.x) {
@@ -599,12 +691,35 @@ function updateEnemies(dt) {
       if (stomp) {
         e.dead = 0.4;
         player.vy = input.jumpHeld ? STOMP_BOUNCE - 90 : STOMP_BOUNCE;
-        game.platanos += 0; sfx.stomp();
+        sfx.stomp();
       } else {
-        die();
+        hurt();
       }
     }
   }
+}
+
+function updateCheese(dt) {
+  for (const c of game.cheese) {
+    c.t += dt;
+    c.vy += 2100 * dt;
+    c.x += c.vx * dt; c.y += c.vy * dt;
+    const tx = Math.floor(c.x / TILE);
+    if (c.vy > 0) { // bounce along the ground like a fireball
+      const ty = Math.floor((c.y + 8) / TILE);
+      const t = tileAt(tx, ty);
+      if (t !== 0) { c.y = ty * TILE - 8; c.vy = -320; }
+    }
+    const tc = tileAt(tx, Math.floor(c.y / TILE));
+    if (tc === 1 || tc === 2) c.t = 99; // splatted on a wall
+    for (const e of level.enemies) {
+      if (e.gone || e.dead > 0) continue;
+      if (c.x > e.x - 6 && c.x < e.x + e.w + 6 && c.y > e.y - 6 && c.y < e.y + e.h + 6) {
+        e.dead = 0.4; c.t = 99; sfx.stomp(); break;
+      }
+    }
+  }
+  game.cheese = game.cheese.filter(c => c.t < 2.6 && c.y < WORLD_H + 40);
 }
 
 // ------------------------------------------------------------
@@ -733,6 +848,21 @@ function render() {
     g.drawImage(SPR.platano, it.x, it.y + bob);
   }
 
+  // power-ups
+  for (const p of level.powerups) {
+    if (p.taken) continue;
+    p.t += 0.03;
+    const bob = Math.sin(p.t * 2) * 3;
+    g.drawImage(p.type === 'queso' ? SPR.queso : SPR.salami, p.x, p.y + bob);
+  }
+
+  // flying queso frito
+  for (const c of game.cheese) {
+    g.save(); g.translate(c.x, c.y); g.rotate(c.t * 10);
+    g.drawImage(SPR.cheeseBall, -5, -4);
+    g.restore();
+  }
+
   // enemies
   for (const e of level.enemies) {
     if (e.gone) continue;
@@ -753,7 +883,11 @@ function render() {
     const f = Math.floor(player.animT * 6) % 2;
     spr = player.facing >= 0 ? (f ? SPR.run : SPR.stand) : (f ? SPR.runL : SPR.standL);
   } else spr = player.facing >= 0 ? SPR.stand : SPR.standL;
-  g.drawImage(spr, player.x - 2, player.y - 2);
+  const flicker = player.inv > 0 && Math.floor(player.inv * 12) % 2 === 0;
+  if (!flicker) {
+    if (player.power > 0) g.drawImage(spr, player.x - 5, player.y + player.h - 38, 30, 40);
+    else g.drawImage(spr, player.x - 2, player.y + player.h - 30, 24, 32);
+  }
 
   g.restore();
 
@@ -776,7 +910,7 @@ function frame(now) {
   if (game.state === 'playing') {
     game.time += dt;
     updatePlayer(dt);
-    if (game.state === 'playing') updateEnemies(dt);
+    if (game.state === 'playing') { updateEnemies(dt); updateCheese(dt); }
     // camera
     const viewW = CW / game.scale;
     const look = game.mode === 'runner' ? 0.28 : 0.42;
