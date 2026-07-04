@@ -6,6 +6,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <title>Super Platanito 🇩🇴</title>
+<meta name="description" content="La aventura de Luis por Quisqueya: un juego de plataformas dominicano. ¡Juega gratis en tu navegador!">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Super Platanito 🇩🇴">
+<meta property="og:description" content="Ayuda a Luis a cruzar el campo, la Zona Colonial y la montaña. Diablos Cojuelos, plátanos, salami y queso frito. ¡Juega gratis, sin instalar nada!">
+<meta property="og:url" content="https://agentmrbig.github.io/super-platanito/">
+<meta property="og:image" content="https://agentmrbig.github.io/super-platanito/cover.jpg">
+<meta name="twitter:card" content="summary_large_image">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body {
@@ -54,6 +61,14 @@
   }
   .screen h1 { font-size: clamp(30px, 8vw, 54px); letter-spacing: 1px;
     text-shadow: 3px 3px 0 #ce1126, 6px 6px 0 #002d62; }
+  #menu { background: linear-gradient(180deg, rgba(3,16,38,.88) 0%, rgba(3,22,45,.62) 55%, rgba(3,16,38,.88) 100%); }
+  @keyframes bobT { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
+  #menu h1 { animation: bobT 2.8s ease-in-out infinite; }
+  #menu .tag { font-size: clamp(15px, 4vw, 20px); margin-top: -4px; font-weight: 600; }
+  #cast { display: flex; align-items: flex-end; gap: 16px; margin: 4px 0 2px; }
+  #cast img { image-rendering: pixelated; filter: drop-shadow(0 4px 3px rgba(0,0,0,.45)); }
+  @keyframes bobC { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+  #cast img:first-child { animation: bobC 1.5s ease-in-out infinite; }
   .screen h2 { font-size: clamp(22px, 6vw, 40px); }
   .screen p  { font-size: clamp(14px, 3.6vw, 18px); opacity: .92; max-width: 520px; line-height: 1.45; }
   .mbtn {
@@ -95,9 +110,10 @@
 <div id="hint"></div>
 
 <div class="screen" id="menu">
-  <div class="flagline">🇩🇴 🌴 🍌</div>
   <h1>SUPER PLATANITO</h1>
-  <p>Ayuda a Platanito a cruzar el campo dominicano, esquivar a los Diablos Cojuelos y llegar al colmado. ¡Recoge todos los plátanos!</p>
+  <p class="tag">🇩🇴 La aventura de Luis por Quisqueya 🇩🇴</p>
+  <div id="cast"></div>
+  <p>Cruza el campo, la Zona Colonial y la montaña. Esquiva a los Diablos Cojuelos, recoge plátanos y llega al colmado.</p>
   <button class="mbtn blue" id="btnClassic">🎮 Modo Clásico</button>
   <button class="mbtn" id="btnRunner">🏃 Modo Corredor</button>
   <div id="lvlRow">
@@ -260,9 +276,9 @@ const playerBase = [
   '...SSSSSS...',
   '....SSSS....',
   '..WWWWWWWW..',
-  '.SWWWRWWWWS.',
-  '.SWWWRWWWWS.',
-  '..WWWWWWWW..',
+  '.SWWBWWWWWS.',
+  '.SWWBWWWWWS.',
+  '..WWBBBWWW..',
   '..BBBBBBBB..',
 ];
 const legsStand = ['...BB..BB...', '...BB..BB...', '..DDD..DDD..', '............'];
@@ -350,11 +366,14 @@ SPR.cheeseBall = makeSprite([
 const MAX_LEVEL = 3;
 const THEMES = [null,
   { name: 'El Campo',      sky0: '#5db8e8', sky1: '#a8e0f5', sea0: '#1a7ab5', sea1: '#0d5a8c',
-    hill: 'rgba(23,111,72,0.5)',   grass: '#3fa34d', grassL: '#57c268', dirt: '#8a5a2b', decor: 'palm' },
+    hill: 'rgba(23,111,72,0.5)',   grass: '#3fa34d', grassL: '#57c268', dirt: '#8a5a2b', decor: 'palm',
+    mount: 'rgba(18,95,110,0.32)', sil: 'rgba(8,62,52,0.55)' },
   { name: 'Zona Colonial', sky0: '#7ec8ea', sky1: '#ffd9a0', sea0: '#2a86b8', sea1: '#0d5a8c',
-    hill: 'rgba(110,85,130,0.35)', grass: '#a8a8b4', grassL: '#c8c8d4', dirt: '#6e6e7a', decor: 'house' },
+    hill: 'rgba(110,85,130,0.35)', grass: '#a8a8b4', grassL: '#c8c8d4', dirt: '#6e6e7a', decor: 'house',
+    mount: 'rgba(160,105,95,0.3)', sil: 'rgba(82,55,88,0.55)' },
   { name: 'La Montaña',    sky0: '#4a90c2', sky1: '#cfe8dd', sea0: '#3e7d5c', sea1: '#2a5a42',
-    hill: 'rgba(35,75,55,0.55)',   grass: '#2e8b4a', grassL: '#3fae5e', dirt: '#6e5030', decor: 'pine' },
+    hill: 'rgba(35,75,55,0.55)',   grass: '#2e8b4a', grassL: '#3fae5e', dirt: '#6e5030', decor: 'pine',
+    mount: 'rgba(35,65,95,0.45)',  sil: 'rgba(18,52,36,0.6)' },
 ];
 const level = {
   cols: 0, tiles: null, items: [], enemies: [], powerups: [],
@@ -920,7 +939,8 @@ function computeScale() {
   const minVisibleCols = 13;
   if (CW / s < minVisibleCols * TILE) s = CW / (minVisibleCols * TILE);
   game.scale = s;
-  game.offY = Math.max(0, (CH - WORLD_H * s) / 2);
+  // anchor the world to the bottom edge so there's no dead strip under the ground
+  game.offY = CH - WORLD_H * s;
 }
 
 function drawPalm(g, x, topRow) {
@@ -998,22 +1018,73 @@ function render() {
   grad.addColorStop(0, th.sky0); grad.addColorStop(0.55, th.sky1); grad.addColorStop(0.56, th.sea0); grad.addColorStop(1, th.sea1);
   g.fillStyle = grad; g.fillRect(0, 0, CW, CH);
 
-  // sun
-  g.fillStyle = '#ffe9a8';
-  g.beginPath(); g.arc(CW * 0.82, CH * 0.14, 34, 0, 7); g.fill();
+  const horizon = CH * 0.56;
+  const skyT = performance.now() / 1000;
 
-  // distant hills (parallax)
+  // sun with a soft glow
+  const sunX = CW * 0.8, sunY = CH * 0.13;
+  const sg = g.createRadialGradient(sunX, sunY, 6, sunX, sunY, 95);
+  sg.addColorStop(0, 'rgba(255,242,190,0.9)'); sg.addColorStop(1, 'rgba(255,242,190,0)');
+  g.fillStyle = sg; g.beginPath(); g.arc(sunX, sunY, 95, 0, 7); g.fill();
+  g.fillStyle = '#ffe9a8'; g.beginPath(); g.arc(sunX, sunY, 32, 0, 7); g.fill();
+
+  // layer 1: far mountain range (slowest)
+  g.fillStyle = th.mount;
+  const mpar = game.camX * 0.12;
+  const mn = Math.ceil(CW / 310) + 2;
+  for (let i = -1; i < mn; i++) {
+    const gi = i + Math.floor(mpar / 310);
+    const mx = i * 310 - (mpar % 310);
+    const mh = 130 + ((gi % 3 + 3) % 3) * 45;
+    g.beginPath();
+    g.moveTo(mx - 210, horizon); g.lineTo(mx, horizon - mh); g.lineTo(mx + 210, horizon);
+    g.closePath(); g.fill();
+  }
+
+  // layer 2: rolling hills
   g.fillStyle = th.hill;
   const par = game.camX * 0.3;
-  for (let i = -1; i < 6; i++) {
+  const hn = Math.ceil(CW / 420) + 2;
+  for (let i = -1; i < hn; i++) {
     const hx = i * 420 - (par % 420);
-    g.beginPath(); g.ellipse(hx, CH * 0.56, 260, 110, 0, Math.PI, 0); g.fill();
+    g.beginPath(); g.ellipse(hx, horizon, 260, 110, 0, Math.PI, 0); g.fill();
   }
+
+  // layer 3: near treeline / skyline silhouettes (fastest)
+  g.fillStyle = th.sil;
+  const spar = game.camX * 0.5;
+  const sn = Math.ceil(CW / 250) + 2;
+  for (let i = -1; i < sn; i++) {
+    const sx = i * 250 - (spar % 250);
+    if (th.decor === 'house') {
+      g.fillRect(sx - 34, horizon - 26, 26, 27); g.fillRect(sx, horizon - 42, 24, 43); g.fillRect(sx + 30, horizon - 18, 20, 19);
+      g.fillRect(sx + 4, horizon - 50, 6, 9);
+    } else if (th.decor === 'pine') {
+      g.beginPath(); g.moveTo(sx - 18, horizon); g.lineTo(sx, horizon - 44); g.lineTo(sx + 18, horizon); g.closePath(); g.fill();
+      g.beginPath(); g.moveTo(sx + 22, horizon); g.lineTo(sx + 36, horizon - 28); g.lineTo(sx + 50, horizon); g.closePath(); g.fill();
+    } else {
+      g.fillRect(sx - 2, horizon - 36, 5, 37);
+      for (let a = 0; a < 5; a++) {
+        g.save(); g.translate(sx, horizon - 36); g.rotate(-Math.PI + a * (Math.PI / 4));
+        g.beginPath(); g.ellipse(15, 0, 16, 4.5, 0, 0, 7); g.fill(); g.restore();
+      }
+    }
+  }
+
+  // sea sparkle
+  g.fillStyle = 'rgba(255,255,255,0.16)';
+  for (let i = 0; i < 12; i++) {
+    const yy = horizon + 12 + (i * 41) % Math.max(30, CH - horizon - 30);
+    const xx = ((i * 197 + skyT * (14 + i * 4)) % (CW + 180)) - 90;
+    g.fillRect(xx, yy, 44 + (i % 3) * 24, 2);
+  }
+
   // clouds
   g.fillStyle = 'rgba(255,255,255,0.85)';
-  const cpar = game.camX * 0.15;
-  for (let i = -1; i < 5; i++) {
-    const cx = i * 500 - (cpar % 500) + 120, cy = CH * 0.13 + (i % 3) * 30;
+  const cpar = game.camX * 0.15 + skyT * 6;
+  const cn = Math.ceil(CW / 500) + 2;
+  for (let i = -1; i < cn; i++) {
+    const cx = i * 500 - (cpar % 500) + 120, cy = CH * 0.12 + (((i % 3) + 3) % 3) * 34;
     g.beginPath(); g.arc(cx, cy, 22, 0, 7); g.arc(cx + 24, cy - 8, 26, 0, 7); g.arc(cx + 50, cy, 20, 0, 7); g.fill();
   }
 
@@ -1108,12 +1179,6 @@ function render() {
   }
 
   g.restore();
-
-  // below-world water
-  const seaY = game.offY + WORLD_H * s;
-  if (seaY < CH) {
-    g.fillStyle = '#0d5a8c'; g.fillRect(0, seaY, CW, CH - seaY);
-  }
 }
 
 // ------------------------------------------------------------
@@ -1157,6 +1222,10 @@ function frame(now) {
       document.getElementById('interlevel').classList.add('hidden');
       startLevel(game.levelNum + 1, true);
     }
+  } else if (game.state === 'menu') {
+    // attract mode: slow pan across the world behind the menu
+    const maxX = Math.max(1, level.cols * TILE - CW / game.scale);
+    game.camX = (game.camX + 26 * dt) % maxX;
   }
 
   render();
@@ -1167,6 +1236,17 @@ requestAnimationFrame(frame);
 // ------------------------------------------------------------
 // Menu wiring
 // ------------------------------------------------------------
+// build the character cast strip from the live sprites
+{
+  const cast = document.getElementById('cast');
+  [[SPR.stand, 72], [SPR.diablo, 52], [SPR.crab, 34], [SPR.salami, 30], [SPR.queso, 30], [SPR.platano, 44]]
+    .forEach(([spr, h]) => {
+      const img = new Image();
+      img.src = spr.toDataURL();
+      img.style.height = h + 'px';
+      cast.appendChild(img);
+    });
+}
 document.getElementById('btnClassic').addEventListener('click', () => { audio(); startGame('classic'); });
 document.getElementById('btnRunner').addEventListener('click', () => { audio(); startGame('runner'); });
 document.getElementById('btnRetry').addEventListener('click', () => startGame(game.mode, game.levelNum));
